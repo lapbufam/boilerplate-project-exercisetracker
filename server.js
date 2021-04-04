@@ -1,36 +1,15 @@
 const express = require("express");
 const app = express();
 const cors = require("cors");
-const { v4: uuidv4 } = require("uuid");
+
 require("dotenv").config();
 
-const format = function date2str(x, y) {
-  var z = {
-    M: x.getMonth() + 1,
-    d: x.getDate(),
-    h: x.getHours(),
-    m: x.getMinutes(),
-    s: x.getSeconds(),
-  };
-  y = y.replace(/(M+|d+|h+|m+|s+)/g, function (v) {
-    return ((v.length > 1 ? "0" : "") + z[v.slice(-1)]).slice(-2);
-  });
-
-  return y.replace(/(y+)/g, function (v) {
-    return x.getFullYear().toString().slice(-v.length);
-  });
-};
-
-let users = [
-  {
-    _id: "ac9907bb-8a36-433a-be3b-27172d9e91d5",
-    username: "leonerd12",
-  },
-];
+let users = [];
 let exercises = [];
 app.use(cors());
 
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));;
 
 app.use(express.static("public"));
 app.get("/", (req, res) => {
@@ -43,47 +22,57 @@ app.get("/api/exercise/users", (req, res) => {
 
 app.post("/api/exercise/new-user", (req, res) => {
   const newUser = {
-    _id: uuidv4(),
+    _id: (users.length + 1).toString(),
     username: req.body.username,
   };
 
   users.push(newUser);
 
-  res.send(newUser);
+  res.status(200).json(newUser);
 });
 
 app.post("/api/exercise/add", (req, res) => {
-  if (users.map((u) => u["_id"]).includes(req.body.userId)) {
-    const newExercise = {
-      _id: uuidv4(),
-      userId: req.body.userId,
-      description: req.body.description,
-      duration: req.body.duration,
-      date: req.body.date
-        ? req.body.date
-        : format(new Date(Date.now()), "yyyy-MM-dd"),
-    };
+  const { userId, description, duration, date } = req.body;
+  const exDate = date ? new Date(date) : new Date(Date.now());
 
-    exercises.push(newExercise);
+  const userSearched = users.find(u => u["_id"] == userId)
 
-    res.status(200).send(newExercise);
-  } else {
-    res.status(404).send("userId not existing");
-  }
+  const newExercise = {
+    ...userSearched,
+    description,
+    duration : parseInt(duration),
+    date: exDate.toDateString()
+  };
+
+  exercises.push(newExercise);
+
+  res.status(200).json(newExercise);
+
 });
 
 app.get("/api/exercise/log", (req, res) => {
-  const exercisesMadeByUser = exercises.filter((ex) => {    
-    if(ex["userId"] === req.query.userId) {
-      return true;
-    }
+  const userId = req.query.userId.toString();
+  const from = req.query.from ? new Date(req.query.from) : null;
+  const to = req.query.to ? new Date(req.query.to) : null;
+  
+  const userSearched = users.find(u => u["_id"] == userId)
+  const limit = req.query.limit || exercises.length;
 
-    return false
-  });
+  let logToReturn;
+  logToReturn = exercises.filter((ex) => ex["_id"] == userId);
 
-  res.status(200).send({
-    log: exercisesMadeByUser,
-    count: exercisesMadeByUser.length,
+  if(from && to){
+    logToReturn = logToReturn.filter(ex => new Date(ex.date).getTime() >= from.getTime() && new Date(ex.date).getTime() <= to.getTime());
+  }
+
+  if(limit){
+    logToReturn = logToReturn.slice(0, limit);
+  }
+
+  res.status(200).json({
+    ...userSearched,
+    log: logToReturn,
+    count: logToReturn.length,
   });
 });
 
